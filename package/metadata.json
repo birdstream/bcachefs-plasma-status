@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "io.github.birdstream.bcachefsstatus",
+    "Name": "Bcachefs Status",
+    "Description": "Status for mounted bcachefs filesystems",
+    "Version": "0.1.0",
+    "License": "GPL-3.0-or-later",
+    "Category": "System Information",
+    "Authors": [{ "Name": "Bcachefs Plasma Status contributors" }]
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Bcachefs status provider for Plasma widget
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/bcachefs-plasma-status --watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
