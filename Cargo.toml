@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 description = "Status helper for the Bcachefs Plasma widget"
 license = "GPL-3.0-or-later"
+repository = "https://github.com/birdstream/bcachefs-plasma-status"
 

@@ -10,6 +10,13 @@ A small KDE Plasma 6 widget, backed by a Rust helper, for monitoring mounted bca
 
 ## Build and install
 
+Clone the repository:
+
+```sh
+git clone https://github.com/birdstream/bcachefs-plasma-status.git
+cd bcachefs-plasma-status
+```
+
 Build the helper from the project root:
 
 ```sh
