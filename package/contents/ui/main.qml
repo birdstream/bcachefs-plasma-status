@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.plasma5support as Plasma5Support
@@ -48,7 +49,7 @@ PlasmoidItem {
                         Layout.fillWidth: true
                         elide: Text.ElideMiddle
                         font.bold: true
-                        font.pointSize: font.pointSize + 2
+                        font.pointSize: Kirigami.Theme.defaultFont.pointSize + 2
                     }
                     PlasmaComponents.Label { text: modelData.online + "/" + modelData.total + " devices online"; Layout.fillWidth: true }
                     PlasmaComponents.ProgressBar { from: 0; to: 100; value: modelData.percent; Layout.fillWidth: true }
