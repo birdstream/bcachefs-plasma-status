@@ -1,6 +1,6 @@
 # Bcachefs Status for Plasma
 
-A small KDE Plasma 6 widget, backed by a Rust helper, for monitoring mounted bcachefs filesystems. It shows online devices, filesystem usage, free space, and `bcachefs reconcile status` information.
+A small KDE Plasma 6 widget, backed by a Rust helper, for monitoring mounted bcachefs filesystems. It shows online devices, filesystem usage, free space, cached data as a share of total filesystem capacity, and `bcachefs reconcile status` information.
 
 ## Requirements
 

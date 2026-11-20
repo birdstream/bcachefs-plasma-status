@@ -55,6 +55,15 @@ PlasmoidItem {
                     PlasmaComponents.ProgressBar { from: 0; to: 100; value: modelData.percent; Layout.fillWidth: true }
                     PlasmaComponents.Label { text: modelData.used + " used of " + modelData.size + " (" + modelData.percent.toFixed(1) + "%)"; Layout.fillWidth: true; wrapMode: Text.Wrap }
                     PlasmaComponents.Label { text: "Free: " + modelData.free; Layout.fillWidth: true }
+                    PlasmaComponents.Label {
+                        Layout.fillWidth: true
+                        visible: !!modelData.cache
+                        text: modelData.cache
+                            ? qsTr("Cached: %1 (%2% of total capacity)").arg(modelData.cache.size)
+                                .arg(Number(modelData.cache.percent).toLocaleString(Qt.locale(), "f", 1))
+                            : ""
+                        wrapMode: Text.Wrap
+                    }
                     Repeater {
                         model: modelData.devices
                         delegate: PlasmaComponents.Label {

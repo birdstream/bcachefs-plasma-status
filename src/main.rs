@@ -8,6 +8,7 @@ struct Filesystem {
     used: String,
     free: String,
     percent: f64,
+    cache: Option<CacheUsage>,
     online: usize,
     total: usize,
     devices: Vec<Device>,
@@ -15,6 +16,11 @@ struct Filesystem {
     reconcile_detail: String,
     scan_pending: String,
     error: String,
+}
+
+struct CacheUsage {
+    bytes: u64,
+    percent: f64,
 }
 
 struct Device { name: String, state: String }
@@ -31,8 +37,12 @@ fn quote(s: &str) -> String {
 fn json(data: &[Filesystem]) -> String {
     let rows = data.iter().map(|f| {
         let devs = f.devices.iter().map(|d| format!("{{\"name\":{},\"state\":{}}}", quote(&d.name), quote(&d.state))).collect::<Vec<_>>().join(",");
-        format!("{{\"mount\":{},\"uuid\":{},\"size\":{},\"used\":{},\"free\":{},\"percent\":{},\"online\":{},\"total\":{},\"devices\":[{}],\"reconcile\":{},\"reconcile_detail\":{},\"scan_pending\":{},\"error\":{}}}",
-            quote(&f.mount), quote(&f.uuid), quote(&f.size), quote(&f.used), quote(&f.free), f.percent,
+        let cache = f.cache.as_ref().map_or_else(|| "null".to_owned(), |cache| {
+            format!("{{\"bytes\":{},\"size\":{},\"percent\":{}}}",
+                cache.bytes, quote(&format_size(cache.bytes)), cache.percent)
+        });
+        format!("{{\"mount\":{},\"uuid\":{},\"size\":{},\"used\":{},\"free\":{},\"percent\":{},\"cache\":{},\"online\":{},\"total\":{},\"devices\":[{}],\"reconcile\":{},\"reconcile_detail\":{},\"scan_pending\":{},\"error\":{}}}",
+            quote(&f.mount), quote(&f.uuid), quote(&f.size), quote(&f.used), quote(&f.free), f.percent, cache,
             f.online, f.total, devs, quote(&f.reconcile), quote(&f.reconcile_detail), quote(&f.scan_pending), quote(&f.error))
     }).collect::<Vec<_>>().join(",");
     format!("[{rows}]")
@@ -90,33 +100,67 @@ fn mounts() -> Vec<String> {
 }
 
 fn inspect(mount: &str) -> Filesystem {
-    let usage = command(&["fs", "usage", "-ah"], mount).unwrap_or_default();
+    let usage = command(&["fs", "usage", "-a"], mount).unwrap_or_default();
     let reconcile = command(&["reconcile", "status"], mount).unwrap_or_default();
     let error = if usage.is_empty() { "Could not read bcachefs fs usage".into() } else { String::new() };
     let uuid = field(&usage, "Filesystem");
-    let size = field(&usage, "Size");
-    let used = field(&usage, "Used");
-    let free = field(&usage, "Free").split_whitespace().next().unwrap_or("").to_string();
-    let percent = usage.lines().find(|l| l.trim_start().starts_with("Used:"))
-        .and_then(|l| l.split_whitespace().nth(1))
-        .and_then(|v| parse_size(v)).zip(usage.lines().find(|l| l.trim_start().starts_with("Size:"))
-            .and_then(|l| l.split_whitespace().nth(1)).and_then(parse_size))
-        .map(|(u,s)| if s > 0.0 { u * 100.0 / s } else { 0.0 }).unwrap_or(0.0);
+    let size = usage_bytes(&usage, "Size");
+    let used = usage_bytes(&usage, "Used");
+    let free = usage_bytes(&usage, "Free");
+    let percent = used.zip(size).map_or(0.0, |(used, size)| percent_of(used, size));
+    let cache = size.filter(|size| *size > 0).and_then(|size| cache_usage(&usage, size));
+    let size = size.map(format_size).unwrap_or_default();
+    let used = used.map(format_size).unwrap_or_default();
+    let free = free.map(format_size).unwrap_or_default();
     let devs = devices(&uuid);
     let online = devs.iter().filter(|d| d.state.contains("[rw]") || d.state.contains("[ro]")).count();
     let lines: Vec<_> = reconcile.lines().filter(|l| !l.contains("backtrace") && !l.trim_start().starts_with("[<") ).collect();
     let detail = lines.iter().take(8).map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
     let status = if reconcile.contains("waiting:") { "Work waiting" }
         else if reconcile.contains("Scan pending:") { "Active" } else { "Status available" };
-    Filesystem { mount: mount.into(), uuid, size, used, free, percent, online,
+    Filesystem { mount: mount.into(), uuid, size, used, free, percent, cache, online,
         total: devs.len(), devices: devs, reconcile: status.into(), reconcile_detail: detail,
         scan_pending: scan_pending(&field(&usage, "Filesystem")), error }
 }
 
-fn parse_size(value: &str) -> Option<f64> {
-    let n: f64 = value.trim_end_matches(|c: char| !c.is_ascii_digit() && c != '.').parse().ok()?;
-    let suffix = value.chars().last()?.to_ascii_uppercase();
-    Some(n * match suffix { 'K' => 1024.0, 'M' => 1024.0_f64.powi(2), 'G' => 1024.0_f64.powi(3), 'T' => 1024.0_f64.powi(4), _ => 1.0 })
+fn usage_bytes(usage: &str, label: &str) -> Option<u64> {
+    field(usage, label).split_whitespace().next()?.parse().ok()
+}
+
+fn percent_of(bytes: u64, size: u64) -> f64 {
+    if size == 0 { 0.0 } else { bytes as f64 * 100.0 / size as f64 }
+}
+
+fn cache_usage(usage: &str, size: u64) -> Option<CacheUsage> {
+    let mut has_replica_summary = false;
+    for line in usage.lines().map(str::trim) {
+        if line.starts_with("Data type") {
+            break;
+        }
+        if let Some(value) = line.strip_prefix("cached:") {
+            let bytes = value.trim().parse().ok()?;
+            return Some(CacheUsage { bytes, percent: percent_of(bytes, size) });
+        }
+        has_replica_summary |= line.starts_with("undegraded");
+    }
+
+    // Bcachefs omits the aggregate cached row when there is no cached data.
+    has_replica_summary.then_some(CacheUsage { bytes: 0, percent: 0.0 })
+}
+
+fn format_size(bytes: u64) -> String {
+    let mut value = bytes as f64;
+    for unit in ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"] {
+        if value < 1024.0 {
+            return match unit {
+                "B" => format!("{bytes} B"),
+                "TiB" | "PiB" | "EiB" => format!("{value:.2} {unit}"),
+                _ => format!("{value:.1} {unit}"),
+            };
+        }
+        value /= 1024.0;
+    }
+    unreachable!("u64 fits in EiB")
 }
 
 fn main() {
